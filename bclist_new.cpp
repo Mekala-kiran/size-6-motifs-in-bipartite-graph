@@ -752,11 +752,17 @@ for(int i = 1; i < p; i++) {
 void SpecialBigraph::pqclique(int l){
     //cout << "ns[" << l << "]=" << ns[l] << endl;
     
-    int a,i,j,k,end,u,v,w,sign_sum;
+    int a,i,j,k,end,u,v,w,sign_sum ,sign_index=0,sign_index1=0;
+    std::vector<int> sign_vec;
+    std::vector<int> sign_vec1;
+    sign_vec.resize(3);
+    sign_vec1.resize(3); // Vector to store the signs
     if(l == 2){
     cout<<"-----------------------------------------------"<<endl;
         cout<<"ns[2] "<<ns[2]<<endl; //2
-       
+        
+        // Initialize the sign index counter
+        sign_index = 0;
         for(i = 0; i < ns[2]; i++){
             u = sub[2][i];
             cout<<"u " << u<<endl; // 0
@@ -769,7 +775,10 @@ void SpecialBigraph::pqclique(int l){
 // op_vertices[2][op_size[2]++] = adj[j];
 			op_vertices[2][op_size[2]++] = adj[j];
 			sign_sum = edge_sign[{u,adj[j]}];
-			cout<<"sign_sum edge_sign[{"<<u<<","<<adj[j]<<"}];"<<sign_sum<<endl;
+			// Store the sign in the vector sequentially
+                         sign_vec[sign_index++] = sign_sum;
+			// Print the sign value and its index in the vector
+                    std::cout << "sign_vec[" << sign_index - 1 << "] = " << sign_sum << std::endl;
                 }
             }
             else{
@@ -806,9 +815,11 @@ void SpecialBigraph::pqclique(int l){
                 j = 0;
                 k = cd[v];
                 while(j < op_size[2] && k < cd[v] + d[v]){
-                    if(op_vertices[2][j] == adj[k]){
-                        //right_count++;
+                    if(op_vertices[2][j] == adj[k]){                     
                         op_vertices[1][op_size[1]++] = adj[k];
+                        sign_sum = edge_sign[{v,adj[k]}];		
+                        sign_vec1[sign_index1++] = sign_sum;		
+                    	std::cout << "sign_vec1[" << sign_index1 - 1 << "] = " << sign_sum << std::endl;
                         j++;
                         k++;
                     }
@@ -822,12 +833,32 @@ void SpecialBigraph::pqclique(int l){
                 if(op_size[1] < q){
                     continue;
                 }
-                
-                
-                
-               // #ifdef COUNT_ONLY
-                //result_count += Tools::choose(op_size[1], q);
-                //#endif
+
+
+int equal_count = 0;
+int not_equal_count = 0;
+int two_three_bal = 0;
+
+// Compare sign_vec and sign_vec1 and count equal and non-equal pairs
+for(int i = 0; i < sign_vec.size(); i++) {
+    if(sign_vec[i] == sign_vec1[i]) {
+        equal_count++;
+    } else {
+        not_equal_count++;
+    }
+}
+
+// Perform "choose 3" operation for equal and non-equal counts
+int equal_combination = (equal_count >= 3) ? (equal_count * (equal_count - 1) * (equal_count - 2)) / 6 : 0;
+int not_equal_combination = (not_equal_count >= 3) ? (not_equal_count * (not_equal_count - 1) * (not_equal_count - 2)) / 6 : 0;
+
+// Output the results
+std::cout << "C(equal_count, 3) = " << equal_combination << std::endl;
+std::cout << "C(not_equal_count, 3) = " << not_equal_combination << std::endl;
+
+two_three_bal = equal_combination + not_equal_combination;
+std::cout << "two_three_bal = " << two_three_bal << std::endl;
+
                 
             }
             
