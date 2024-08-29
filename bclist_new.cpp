@@ -1114,23 +1114,30 @@ void SpecialBigraph::pqclique(int l){
     int a,i,j,k,end,u,v,w,sign_sum=0;
     if(l == 2){
 
-//cout<<"ns[2]"<<ns[2]<<endl;
+cout<<"ns[2]"<<ns[2]<<endl;
         for(i = 0; i < ns[2]; i++){        
             u = sub[2][i];
           // cout<<"U "<<u<<endl;
             //cout<<"----------          U" << u<<"        -----------"<<endl;
             clique_vertices_in_left[p-2] = u;
-	    std::unordered_map<int, int> uv;
+            std::unordered_map<int, std::pair<int, int>> sign_map;
+            std::unordered_map<int, std::pair<int, int>> temp;
             op_size[2] = 0;
             end = cd[u] + d[u];
             if(p <= 2){
                 for(j = cd[u]; j < end; j++){
                
                     op_vertices[2][op_size[2]++] = adj[j];
+                   // std::cout << "u, adj[j] Edge sign for edge (" << u << ", " << adj[j] << ") is: " << edge_sign[{u, adj[j]}] << std::endl;
+                     //cout<<"U "<<u<<endl;
+                    // cout<<" adj[j] " <<  adj[j]<<endl;
                     sign_sum = edge_sign[{u, adj[j]}];
-                    uv[adj[j]] = sign_sum;                                                                    
+                    sign_map[adj[j]].first += 1;
+                    sign_map[adj[j]].second =   sign_sum;                                                                    
                     
-                }                           
+                }
+                
+              temp = sign_map;
                 
             }
             
@@ -1141,7 +1148,11 @@ void SpecialBigraph::pqclique(int l){
             end = two_hop_cd[u] + two_hop_d[2][u];
             for(a = two_hop_cd[u]; a < end; a++){
                 v = two_hop_adj[a];
-		std::unordered_map<int, int> vw;
+                long long int similar = 0;
+                long long int non_similar = 0;
+                //clique_vertices_in_left[0] = v;
+                clique_vertices_in_left[p-1] = v;
+                
                 op_size[1] = 0;
                 
                 j = 0;
@@ -1150,7 +1161,9 @@ void SpecialBigraph::pqclique(int l){
                     if(op_vertices[2][j] == adj[k]){
                         op_vertices[1][op_size[1]++] = adj[k];
                         sign_sum = edge_sign[{v, adj[k]}];                        
-                        vw[adj[k]] = sign_sum;
+                        sign_map[adj[k]].first += 1;
+                        sign_map[adj[k]].second += sign_sum;  
+                                           
                         j++;
                         k++;
                     }
@@ -1162,60 +1175,33 @@ void SpecialBigraph::pqclique(int l){
                         k++;
                     }
 		 	
-                }		
-		// Now compare sets of three elements from uv and vw
-std::vector<int> uv_keys;
-std::vector<int> vw_keys;
+                }	
 
-// Collect keys from uv and vw
-for (const auto &pair : uv) {
-    uv_keys.push_back(pair.first);
-}
-
-for (const auto &pair : vw) {
-    vw_keys.push_back(pair.first);
-}
-
-int uv_size = uv_keys.size();
-int vw_size = vw_keys.size();
-
-for (int i = 0; i < uv_size; i++) {
-    for (int j = i + 1; j < uv_size; j++) {
-        for (int k = j + 1; k < uv_size; k++) {
-            int key1 = uv_keys[i];
-            int key2 = uv_keys[j];
-            int key3 = uv_keys[k];
-
-            for (int a = 0; a < vw_size; a++) {
-                for (int b = a + 1; b < vw_size; b++) {
-                    for (int c = b + 1; c < vw_size; c++) {
-                        int v_key1 = vw_keys[a];
-                        int v_key2 = vw_keys[b];
-                        int v_key3 = vw_keys[c];
-
-                        // Compare indices
-                        if ((key1 == v_key1 && key2 == v_key2 && key3 == v_key3) ||
-                            (key1 == v_key2 && key2 == v_key3 && key3 == v_key1) ||
-                            (key1 == v_key3 && key2 == v_key1 && key3 == v_key2)) {
-                            // If all indices and values match
-                            if (uv[key1] == vw[v_key1] && uv[key2] == vw[v_key2] && uv[key3] == vw[v_key3]) {
-                                result++;
-                            } else {
-                                // If all indices match but not all values
-                                if (uv[key1] != vw[v_key1] || uv[key2] != vw[v_key2] || uv[key3] != vw[v_key3]) {
-                                    result++;
-                                }
-                            }
-                        }
+			
+		for (const auto& pair : sign_map) {
+		if(pair.second.first > 1){
+                    if (pair.second.second %2 == 0) {
+                        similar++;
+                    } else if (pair.second.second %2 == 1) {
+                        non_similar++;
+                    }
                     }
                 }
-            }
-        }
-    }
-}	
+                
+              
+                if (similar > 2) {
+                    result += (similar * (similar - 1) * (similar - 2)) / 6;
+                }
+
+                if (non_similar > 2) {
+                    result += (non_similar * (non_similar - 1) * (non_similar - 2)) / 6;
+                }
+               // std::cout << " Result = " << result << std::endl;
+                 
+               sign_map = temp;
                 	
                 
-                	           
+                //cout<<"==========="<<endl;	           
                 if(op_size[1] < q){
                     continue;
                 }
@@ -1255,11 +1241,9 @@ for (int i = 0; i < uv_size; i++) {
             
            
         }
-
         std::cout << "balanced  Result = " << result << std::endl;
         return;
     }
-    
     for(i = 0; i < ns[l]; i++){
         u = sub[l][i];
         //clique_vertices_in_left[l-1] = u;
