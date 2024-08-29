@@ -8,7 +8,96 @@ VertexDegree::VertexDegree(int v, int d): vertex(v), degree(d){}
 
 VertexDegree::~VertexDegree(){}
 
+LargeBiclique::LargeBiclique(): size(0){}
 
+LargeBiclique::LargeBiclique(vector<int> &l_vertices, vector<int> &r_vertices){
+    left_vertices = l_vertices;
+    right_vertices = r_vertices;
+    size = l_vertices.size() * r_vertices.size();
+}
+
+LargeBiclique::~LargeBiclique(){}
+
+vector<int> Tools::intersection(vector<int> &vec1, vector<int> &vec2){
+    return intersection(vec1, vec2, 0, 0);
+}
+
+vector<int> Tools::intersection(vector<int> &vec1, vector<int> &vec2, int offset1, int offset2){
+    vector<int> ans;
+    if(vec1.empty() || vec2.empty() || offset1 >= vec1.size() || offset2 >= vec2.size()){
+        return ans;
+    }
+    
+    // we assume vec1 and vec2 are sorted by ascending order of the elements
+    int i, j;
+    i = offset1;
+    j = offset2;
+    while(i < vec1.size() && j < vec2.size()){
+        if(vec1[i] == vec2[j]){
+            ans.emplace_back(vec1[i]);
+            i++;
+            j++;
+        }
+        else if(vec1[i] < vec2[j]){
+            i++;
+        }
+        else{
+            j++;
+        }
+    }
+    return ans;
+}
+
+vector<int> Tools::merge(vector<int> &vec1, vector<int> &vec2){
+    vector<int> ans;
+    
+    // we assume vec1 and vec2 are sorted by ascending order of the elements
+    int i, j;
+    i = 0;
+    j = 0;
+    while(i < vec1.size() && j < vec2.size()){
+        if(vec1[i] == vec2[j]){
+            ans.emplace_back(vec1[i]);
+            i++;
+            j++;
+        }
+        else if(vec1[i] < vec2[j]){
+            ans.emplace_back(vec1[i]);
+            i++;
+        }
+        else{
+            ans.emplace_back(vec2[j]);
+            j++;
+        }
+    }
+    return ans;
+}
+
+int Tools::intersection_count(vector<int> &vec1, vector<int> &vec2){
+    int ans = 0;
+    if(vec1.empty() || vec2.empty()){
+        return 0;
+    }
+    
+    // we assume vec1 and vec2 are sorted by ascending order of the elements
+    int i, j;
+    i = j = 0;
+    while(i < vec1.size() && j < vec2.size()){
+        if(vec1[i] == vec2[j]){
+            ans++;
+            i++;
+            j++;
+        }
+        else if(vec1[i] > vec2[j]){
+            j++;
+        }
+        else{
+            i++;
+        }
+    }
+    
+    return ans;
+}
 
 lint Tools::choose(lint n, lint k){
     if(combination_cache[n][k] > 0){
@@ -30,6 +119,37 @@ lint Tools::choose(lint n, lint k){
         }
         return r;
     }
+}
+
+
+lint Tools::my_factorial(lint n, lint k){
+    if(my_factorial_cache[n][k] > 0){
+        return my_factorial_cache[n][k];
+    }
+    else{
+        if(k > n){
+            return 0;
+        }
+        lint r = 1;
+        for(lint i = k; i <= n; ++i){
+            r *= i;
+        }
+        if(n <= MAX_N && k <= MAX_K){
+            my_factorial_cache[n][k] = r;
+        }
+        return r;
+    }
+}
+
+string Tools::toString(vector<int> &vec){
+    if(vec.empty()){
+        return "";
+    }
+    string ans = to_string(vec[0]);
+    for(int i = 1; i < vec.size(); i++){
+        ans += "/" + to_string(vec[i]);
+    }
+    return ans;
 }
 
 vector<int> Tools::toVector(const string &str){
@@ -169,19 +289,31 @@ void SpecialBigraph::read_graph() {
         
         //////cout << "Edge (" << A << ", " << B << ") has sign: " << sign << endl;
         
+        #ifdef LARGE_BICLIQUES
+        original_ids[A] = edge[0]; 
+        original_ids[B] = edge[1]; 
+        #endif
+        
+        
     }
-    
+        //print_map(original_ids);
 
-/*    #ifdef IS_DEBUGGING
-    print_adj();
-    print_edges();
-    #endif*/
+    #ifdef IS_DEBUGGING
+    //print_adj();
+   // print_edges();
+    #endif
     
-    ////cout << "end of read graph" << endl;
-    ////cout << "#vertices = " << num_vertices << ", #left_vertices = " << n_vertices[0] << ", #right_vertices = " << n_vertices[1] << endl;
-    ////cout << "#edges = " << num_edges << endl;
+    cout << "end of read graph" << endl;
+    cout << "#vertices = " << num_vertices << ", #left_vertices = " << n_vertices[0] << ", #right_vertices = " << n_vertices[1] << endl;
+    cout << "#edges = " << num_edges << endl;
 }
-
+/*
+ *
+ * trim the bipartite graph such that the remaining bipartite graph is a (q,p)-core,
+ * that is, recursively remove all vertices in the left partition with a degree less than q
+ * and vertices in the right partition with a degree less than p.
+ *
+ */
 
 void SpecialBigraph::trim_graph_by_core(){
 
@@ -249,14 +381,145 @@ void SpecialBigraph::trim_graph_by_core(){
     
     #ifdef IS_DEBUGGING
 
-    print_adj();
+   // print_adj();
     #endif
     
-    ////cout << "after trimming by core" << endl;
+    cout << "after trimming by core" << endl;
     
     reformat_graph();
     
-    ////cout << "end of trim graph by core" << endl;
+    cout << "end of trim graph by core" << endl;
+}
+
+void SpecialBigraph::trim_graph_by_two_hop_bk(){
+    
+    int *common_neig_count = new int[num_vertices]();
+    int *common_neig_map = new int[num_vertices]();
+    int *aux_array_two_neig = new int[num_vertices]();
+    for(int i = 0; i < num_vertices; i++){     if(i%1000==0){cout << i << endl;}
+        int idx = 0;
+        for(int j = 0; j < adj_vec[i].size(); j++){
+            int neighbor = adj_vec[i][j];
+            //if(neighbor < i){
+                for(int k = 0; k < adj_vec[neighbor].size(); k++){
+                    int two_hop_neighbor = adj_vec[neighbor][k];
+                    if(two_hop_neighbor < i){
+                        common_neig_map[two_hop_neighbor]++;
+                        if(common_neig_map[two_hop_neighbor] == 1){
+                            aux_array_two_neig[idx++] = two_hop_neighbor;
+                        }
+                    }
+                    else{
+                        break;
+                    }
+                }
+            //}
+            //else{
+            //    break;
+            //}
+        }
+        for(int j = 0; j < idx; j++){
+            int two_hop_neighbor = aux_array_two_neig[j];
+            if((i < n_vertices[0] && common_neig_map[two_hop_neighbor] >= q) || (i >= n_vertices[0] && common_neig_map[two_hop_neighbor] >= p)){
+                common_neig_count[i]++;
+                common_neig_count[two_hop_neighbor]++;
+            }
+            common_neig_map[two_hop_neighbor] = 0;
+        }
+    }
+    
+    cout << "count common neighbors" << endl;
+    
+    for(int i = 0; i < num_vertices; i++){
+        if((i < n_vertices[0] && common_neig_count[i] < p - 1) || (i >= n_vertices[0] && common_neig_count[i] < q - 1)){
+            for(int j = 0; j < deg[i]; j++){
+                int other = adj_vec[i][j];
+                for(int k = 0; k < deg[other]; k++){
+                    if(adj_vec[other][k] == i){
+                        adj_vec[other][k] = adj_vec[other][--deg[other]];
+                        break;
+                    }
+                }
+            }
+            adj_vec[i].clear();
+            deg[i] = 0;
+        }
+    }
+    delete[] common_neig_count;
+    delete[] common_neig_map;
+    delete[] aux_array_two_neig;
+    
+    #ifdef IS_DEBUGGING
+   // print_adj();
+    #endif
+    
+    reformat_graph();
+    
+    cout << "end of trim graph by two hop neighbors" << endl;
+}
+
+void SpecialBigraph::trim_graph_by_two_hop(){
+    
+    int array_size = n_vertices[0];
+    
+    int *common_neig_count = new int[array_size]();
+    int *common_neig_map = new int[array_size]();
+    int *aux_array_two_neig = new int[array_size]();
+    for(int i = 0; i < array_size; i++){
+        int idx = 0;
+        for(int j = 0; j < adj_vec[i].size(); j++){
+            int neighbor = adj_vec[i][j];
+            for(int k = 0; k < adj_vec[neighbor].size(); k++){
+                int two_hop_neighbor = adj_vec[neighbor][k];
+                if(two_hop_neighbor < i){
+                    common_neig_map[two_hop_neighbor]++;
+                    if(common_neig_map[two_hop_neighbor] == 1){
+                        aux_array_two_neig[idx++] = two_hop_neighbor;
+                    }
+                }
+                else{
+                    break;
+                }
+            }
+        }
+        for(int j = 0; j < idx; j++){
+            int two_hop_neighbor = aux_array_two_neig[j];
+            if((i < n_vertices[0] && common_neig_map[two_hop_neighbor] >= q) || (i >= n_vertices[0] && common_neig_map[two_hop_neighbor] >= p)){
+                common_neig_count[i]++;
+                common_neig_count[two_hop_neighbor]++;
+            }
+            common_neig_map[two_hop_neighbor] = 0;
+        }
+    }
+    
+    cout << "count common neighbors" << endl;
+    
+    for(int i = 0; i < array_size; i++){
+        if((i < n_vertices[0] && common_neig_count[i] < p - 1) || (i >= n_vertices[0] && common_neig_count[i] < q - 1)){
+            for(int j = 0; j < deg[i]; j++){
+                int other = adj_vec[i][j];
+                for(int k = 0; k < deg[other]; k++){
+                    if(adj_vec[other][k] == i){
+                        adj_vec[other][k] = adj_vec[other][--deg[other]];
+                        break;
+                    }
+                }
+            }
+            adj_vec[i].clear();
+            deg[i] = 0;
+        }
+    }
+    delete[] common_neig_count;
+    delete[] common_neig_map;
+    delete[] aux_array_two_neig;
+    
+    #ifdef IS_DEBUGGING
+   // print_adj();
+    #endif
+    
+    reformat_graph();
+    
+    cout << "end of trim graph by two hop neighbors" << endl;
 }
 
 void SpecialBigraph::reformat_graph(){
@@ -305,6 +568,10 @@ void SpecialBigraph::reformat_graph(){
     largest_index_in_partition[0] = 0;
     largest_index_in_partition[1] = n_vertices[0];
     
+    #ifdef LARGE_BICLIQUES
+    unordered_map<int, int> tmp_ids_map;
+    #endif
+    
 
 for (auto edge : edges) {
         int A = edge[0];  
@@ -327,24 +594,29 @@ for (auto edge : edges) {
         
         ////cout << "Edge (" << A << ", " << B << ") has sign: " << sign << endl;
         
+        #ifdef LARGE_BICLIQUES
+        tmp_ids_map[A] = original_ids[edge[0]];
+        tmp_ids_map[B] = original_ids[edge[1]];
+        #endif                
     }
-
+    #ifdef LARGE_BICLIQUES
+    original_ids = tmp_ids_map;
+    //print_map(original_ids);
+    #endif
     
     for(int i = 0; i < num_vertices; i++){
         sort(adj_vec[i].begin(), adj_vec[i].end());
     }
     
     #ifdef IS_DEBUGGING
-    ////cout<<"=============print adj=========="<<endl;
-    print_adj();  
-    ////cout<<"=============print edges=========="<<endl;
-    print_edges();    
+   //print_adj();    
+   // print_edges();
     #endif
     
-    ////cout << "end of reformat graph" << endl;
+    cout << "end of reformat graph" << endl;
     
-    ////cout << "#vertices = " << num_vertices << ", #left_vertices=" << n_vertices[0] << ", #right_vertices=" << n_vertices[1] << endl;
-    ////cout << "#edges = " << edges.size() << endl;
+    cout << "#vertices = " << num_vertices << ", #left_vertices=" << n_vertices[0] << ", #right_vertices=" << n_vertices[1] << endl;
+    cout << "#edges = " << edges.size() << endl;
    
 }
 
@@ -459,6 +731,107 @@ void SpecialBigraph::collect_two_hop_adj(){
     delete[] aux_array_two_neig;
 
 }
+void SpecialBigraph::collect_two_hop_adj_bk(){
+    #ifdef TRIM_BY_TWO_HOP_NEIGHBORS
+    int array_size = num_vertices;
+    #else
+    int array_size = n_vertices[0];
+    #endif
+    
+    two_hop_adj_maxsize = new int[array_size];
+    two_hop_adj_vec = new int*[array_size];
+    for(int i = 0; i < array_size; i++){
+        two_hop_adj_maxsize[i] = NTWOHOPS;
+        two_hop_adj_vec[i] = new int[two_hop_adj_maxsize[i]];
+    }
+    two_hop_adj_size = new int[array_size]();
+    
+    int *common_neig_map = new int[array_size]();
+    int *aux_array_two_neig = new int[array_size]();
+    
+    #ifdef TRIM_BY_TWO_HOP_NEIGHBORS
+    int *common_neig_count = new int[array_size]();
+    #endif
+    //for(int i = 0; i < n_vertices[0]; i++){
+    for(int i = 0; i < array_size; i++){
+        int idx = 0;
+        for(int j = 0; j < adj_vec[i].size(); j++){
+            int neighbor = adj_vec[i][j];
+            for(int k = 0; k < adj_vec[neighbor].size(); k++){
+                int two_hop_neighbor = adj_vec[neighbor][k];
+                if(two_hop_neighbor < i){
+                    common_neig_map[two_hop_neighbor]++;
+                    if(common_neig_map[two_hop_neighbor] == 1){
+                        aux_array_two_neig[idx++] = two_hop_neighbor;
+                    }
+                }
+                else{
+                    break;
+                }
+            }
+        }
+        
+        for(int j = 0; j < idx; j++){
+            int two_hop_neighbor = aux_array_two_neig[j];
+            #ifdef TRIM_BY_TWO_HOP_NEIGHBORS
+            if((i < n_vertices[0] && common_neig_map[two_hop_neighbor] >= q) || (i >= n_vertices[0] && common_neig_map[two_hop_neighbor] >= p)){
+            #else
+            if(common_neig_map[two_hop_neighbor] >= q){
+            #endif
+                #ifdef TRIM_BY_TWO_HOP_NEIGHBORS
+                if(two_hop_adj_size[i] >= two_hop_adj_maxsize[i]){
+                    two_hop_adj_maxsize[i] *= 2;
+                    int *temp_array = new int[two_hop_adj_maxsize[i]];
+                    memcpy(temp_array, two_hop_adj_vec[i], sizeof(int)*two_hop_adj_size[i]);
+                    delete[] two_hop_adj_vec[i];
+                    two_hop_adj_vec[i] = temp_array;
+                }
+                two_hop_adj_vec[i][two_hop_adj_size[i]++] = two_hop_neighbor;
+                
+                common_neig_count[i]++;
+                common_neig_count[two_hop_neighbor]++;
+                #endif
+                
+                if(two_hop_adj_size[two_hop_neighbor] >= two_hop_adj_maxsize[two_hop_neighbor]){
+                    //two_hop_adj_maxsize[two_hop_neighbor] += NTWOHOPS;
+                    two_hop_adj_maxsize[two_hop_neighbor] *= 2;
+                    int *temp_array = new int[two_hop_adj_maxsize[two_hop_neighbor]];
+                    memcpy(temp_array, two_hop_adj_vec[two_hop_neighbor], sizeof(int)*two_hop_adj_size[two_hop_neighbor]);
+                    delete[] two_hop_adj_vec[two_hop_neighbor];
+                    two_hop_adj_vec[two_hop_neighbor] = temp_array;
+                }
+                two_hop_adj_vec[two_hop_neighbor][two_hop_adj_size[two_hop_neighbor]++] = i;
+                
+            }
+            common_neig_map[two_hop_neighbor] = 0;
+        }
+    }
+    
+    #ifdef TRIM_BY_TWO_HOP_NEIGHBORS
+    for(int i = 0; i < num_vertices; i++){
+        if((i < n_vertices[0] && common_neig_count[i] < p-1) || (i >= n_vertices[0] && common_neig_count[i] < q-1)){
+            for(int j = 0; j < deg[i]; j++){
+                int other = adj_vec[i][j];
+                for(int k = 0; k < deg[other]; k++){
+                    if(adj_vec[other][k] == i){
+                        adj_vec[other][k] = adj_vec[other][--deg[other]];
+                        break;
+                    }
+                }
+            }
+            adj_vec[i].clear();
+            deg[i] = 0;
+        }
+    }
+    #endif
+    
+    delete[] common_neig_map;
+    delete[] aux_array_two_neig;
+    #ifdef TRIM_BY_TWO_HOP_NEIGHBORS
+    delete[] common_neig_count;
+    #endif
+}
+
 
 bool SpecialBigraph::prepare_graph(){
     #ifdef USE_CORE_REDUCTION
@@ -466,7 +839,7 @@ bool SpecialBigraph::prepare_graph(){
     #endif
     
     if(n_vertices[0] == 0 || n_vertices[1] == 0){
-        ////cout << "No results because the graph is pruned by core" << endl;
+        cout << "No results because the graph is pruned by core" << endl;
         return false;
     }
     
@@ -484,7 +857,7 @@ bool SpecialBigraph::prepare_graph(){
             anchor_left = true;
     }
     
-    ////cout << "anchor_left = " << anchor_left << endl;  
+  cout << "anchor_left = " << anchor_left << endl;  
 
     
     sort_vertices(priority);
@@ -492,7 +865,7 @@ bool SpecialBigraph::prepare_graph(){
     #ifdef IS_DEBUGGING
     print(all_vertices);
     #endif
-    ////cout << "finish sorting vertices" << endl;
+    ////cout << "finishsorting vertices" << endl;
   
     int id = 0;
     for(vector<int>::iterator it = all_vertices.begin(); it != all_vertices.end(); it++){
@@ -503,34 +876,15 @@ bool SpecialBigraph::prepare_graph(){
     // sort the graph by the rank of vertices
     for(int i = 0; i < adj_vec.size(); i++){
         adj_vec[i].clear();
-    }
-    
-
-    ////cout << "========================sort the graph by the rank of vertices=======================" << endl;
-
-    #ifdef IS_DEBUGGING
-    print(all_vertices);
-    #endif
-    
-    #ifdef IS_DEBUGGING
-    ////cout<<"=============print adj=========="<<endl;
-    print_adj();  
-    ////cout<<"=============print edges=========="<<endl;
-    print_edges();    
-    #endif    
-    
-     ////cout<<"=====================  adj_vec. clear() ============================================"<<endl;
-    adj_vec.clear();
-        #ifdef IS_DEBUGGING
-    ////cout<<"=============print adj=========="<<endl;
-    print_adj();  
-    ////cout<<"=============print edges=========="<<endl;
-    print_edges();    
-    #endif   
+    }      
+    adj_vec.clear(); 
     delete[] deg;
     deg = new int[num_vertices]();
     adj_vec.resize(num_vertices, vector<int>());
 
+    #ifdef LARGE_BICLIQUES
+    unordered_map<int, int> tmp_ids_map;
+    #endif
    for (auto edge : edges) {
         
         int A = edge[0];  
@@ -546,13 +900,21 @@ bool SpecialBigraph::prepare_graph(){
         deg[B]++;     
                  
         edge_sign[{A, B}] = sign;
-        edge_sign[{B, A}] = sign;    
-        
-    }		
+        edge_sign[{B, A}] = sign; 
 
+        #ifdef LARGE_BICLIQUES
+        tmp_ids_map[A] = original_ids[edge[0]];
+        tmp_ids_map[B] = original_ids[edge[1]];
+        #endif   
+        
+    }	
+    	
+    #ifdef LARGE_BICLIQUES
+    original_ids = tmp_ids_map;
+    //print_map(original_ids);
+    #endif
+    
        if(!anchor_left){
-       //////cout<<"anchor_left "<<anchor_left<<endl;
-       
         int tmp_num = n_vertices[0];
         n_vertices[0] = n_vertices[1];
         n_vertices[1] = tmp_num;
@@ -561,8 +923,7 @@ bool SpecialBigraph::prepare_graph(){
         p = q;
         q = tmp_value;
     }
-    ////cout<<"p " << p  <<endl;
-    ////cout<<"q " << q <<endl;
+
     for(int i = 0; i < num_vertices; i++){
         sort(adj_vec[i].begin(), adj_vec[i].end());
     }
@@ -574,10 +935,9 @@ bool SpecialBigraph::prepare_graph(){
     }
     
     #ifdef IS_DEBUGGING
-    ////cout << "adj after preparing" << endl;
+    cout << "adj after preparing" << endl;
     print_adj();
-    print_two_hop_adj();
-    ////cout<<"----------------------------------------------------"<<endl;
+    //print_two_hop_adj();
     #endif
     return true;
 }
@@ -639,13 +999,33 @@ double SpecialBigraph::estimate_cost(int side){
     return totalCost;
 }
  
+void SpecialBigraph::find_combinations(vector< vector<int> > &combs, lint &comb_count, vector<int> &seed_vertices, vector<int> &comb, int beg_offset, int curr_depth, int total_depth){
+    //comb用于临时存储结果。len(comb)==total_depth；beg_offset为左侧游标，初始值取0；
+    // total_depth是取出个数；curr_depth用于指示递归深度，初始值取total_depth）
+    int N = seed_vertices.size();
+    if (curr_depth == 0) {
+        #ifndef COUNT_ONLY
+        combs.emplace_back(comb);
+        #endif
+        comb_count++;
+        return;
+    }
+    for (int i = beg_offset; i < N; i++){
+        comb[total_depth-curr_depth] = seed_vertices[i];
+        find_combinations(combs, comb_count, seed_vertices, comb, i + 1, curr_depth - 1, total_depth);
+    }
+} 
  
  
- void SpecialBigraph::listing_cliques(){
+void SpecialBigraph::listing_cliques(){
     int start_idx, max_d, max_two_hop_d, tmp_ns, e, two_hop_e;
-    int *tmp_sub, *tmp_two_hop_d;
+    int *tmp_sub, *tmp_two_hop_d, *tmp_two_hop_sub;
+    int *tmp_lab;
     
-      n = n_vertices[0];
+    //if(p > q){}
+    //cout << "p=" << p << endl;
+    //cout << "q=" << q << endl;
+    n = n_vertices[0];
     
     d = new int[n];
     tmp_two_hop_d = new int[n];
@@ -655,31 +1035,32 @@ double SpecialBigraph::estimate_cost(int side){
         d[i] = adj_vec[i].size();
         e += d[i];
     }
-    
-    for(int i = 0; i < n; i++){      
+    for(int i = 0; i < n; i++){
+        //tmp_two_hop_d[i] = two_hop_adj_vec[start_idx + i].size();
         tmp_two_hop_d[i] = two_hop_adj_size[i];
         two_hop_e += tmp_two_hop_d[i];
     }
-
-    ns = new int[p+1]; // 3
-    cd = new int[n+1]; // 3
-    adj = new int[e]; // 6
-    two_hop_d = new int*[p+1]; //3
-    two_hop_cd = new int[n+1]; // 3
-    two_hop_adj = new int[two_hop_e]; // 1
-    lab = new int[n]; 
+    
+    ns = new int[p+1];
+    
+    cd = new int[n+1];
+    adj = new int[e];
+    two_hop_d = new int*[p+1];
+    two_hop_cd = new int[n+1];
+    two_hop_adj = new int[two_hop_e];
+    lab = new int[n];
     sub = new int*[p+1];
     op_vertices = new int*[p+1];
     op_size = new int[p+1];
     result_count = 0;
-	
+    
     
     tmp_ns = 0;
     cd[0] = 0;
     two_hop_cd[0] = 0;
     max_d = 0;
     max_two_hop_d = 0;
-    tmp_sub = new int[n]; 
+    tmp_sub = new int[n];
     
     for(int i = 1; i < n+1; i++){
         cd[i] = cd[i-1] + d[i-1];
@@ -688,271 +1069,269 @@ double SpecialBigraph::estimate_cost(int side){
         max_two_hop_d = (max_two_hop_d > tmp_two_hop_d[i-1])?max_two_hop_d:tmp_two_hop_d[i-1];
         tmp_sub[tmp_ns++] = i-1;
         lab[i-1] = p;
-        
-        
-        // Print the values for each iteration
-        /* std::////cout << "Iteration " << i << ":\n";
-        std::////cout << "cd[" << i << "] = " << cd[i] << "\n";
-        std::////cout << "max_d = " << max_d << "\n";
-        std::////cout << "two_hop_cd[" << i << "] = " << two_hop_cd[i] << "\n";
-        std::////cout << "max_two_hop_d = " << max_two_hop_d << "\n";
-        std::////cout << "tmp_sub[" << tmp_ns-1 << "] = " << tmp_sub[tmp_ns-1] << "\n";
-        std::////cout << "lab[" << i-1 << "] = " << lab[i-1] << "\n";
-         std::////cout << "tmp_ns " << tmp_ns << ":\n";
-        std::////cout << "----------------------------\n";*/
-
     }
- 
-	     for(int i = 0; i < n; i++){
-		for(int j = 0; j < adj_vec[i].size(); j++){
-		    adj[cd[i] + j] = adj_vec[i][j];
-		}
-
-    	     }
-    	     
-	    for(int i = 0; i < n; i++){	   
-		for(int j = 0; j < two_hop_adj_size[i]; j++){
-		    two_hop_adj[two_hop_cd[i] + j] = two_hop_adj_vec[i][j];
-		}
-	    }
-
-     
-for(int i = 1; i < p; i++) {
-    two_hop_d[i] = new int[n];
-    sub[i] = new int[max_two_hop_d];
-    op_vertices[i] = new int[max_d];
-
-    // Print the indices and the sizes of the allocated arrays
-   /* std::////cout << "Index i: " << i << std::endl;
-    std::////cout << "Allocated two_hop_d[" << i << "] with size " << n << std::endl;
-    std::////cout << "Allocated sub[" << i << "] with size " << max_two_hop_d << std::endl;
-    std::////cout << "Allocated op_vertices[" << i << "] with size " << max_d << std::endl;
-    std::////cout << std::endl;  // Print an empty line for better readability*/
-}
-
-
-      		ns[p] = tmp_ns;
-
-    		two_hop_d[p] = tmp_two_hop_d;
-    		
-    		sub[p] = tmp_sub;
-    		
-	
-		op_vertices[p] = new int[max_d];
-
-           ////cout<<"-----------------------------------------------"<<endl;
-       
-	   // ////cout << "construct graph done" << endl;
-	    //////cout << "Calling pqclique with p = " << p << endl;  
-	    clique_vertices_in_left.resize(p);
-	     pqclique(p);
+        
+    for(int i = 0; i < n; i++){
+        for(int j = 0; j < adj_vec[i].size(); j++){
+            adj[cd[i] + j] = adj_vec[i][j];
+        }
+    }
     
+    //for(int i = 0; i < e; i++){
+    //    cout << adj[i] << " ";
+    //}
+    //cout << endl;
+    
+    for(int i = 0; i < n; i++){
+        for(int j = 0; j < two_hop_adj_size[i]; j++){
+            two_hop_adj[two_hop_cd[i] + j] = two_hop_adj_vec[i][j];
+        }
+    }
+    
+    //for(int i = 0; i < two_hop_e; i++){
+    //    cout << two_hop_adj[i] << " ";
+    //}
+    //cout << endl;
+        
+    for(int i = 1; i < p; i++){
+        two_hop_d[i] = new int[n];
+        sub[i] = new int[max_two_hop_d];
+        op_vertices[i] = new int[max_d];
+    }
+    ns[p] = tmp_ns;
+    two_hop_d[p] = tmp_two_hop_d;
+    sub[p] = tmp_sub;
+    op_vertices[p] = new int[max_d];
+    
+    cout << "construct graph done" << endl;
+    clique_vertices_in_left.resize(p);
+    pqclique(p);
 }
- 
+
 void SpecialBigraph::pqclique(int l){
     //cout << "ns[" << l << "]=" << ns[l] << endl;
-    
-    int a, i, j, k, end, u, v, w, sign_sum = 0;
-    long long int result = 0;
-    //std::cout << "Starting pqclique with l: " << l << std::endl;
-
-    
+     long long int result = 0;
+    int a,i,j,k,end,u,v,w,sign_sum=0;
     if(l == 2){
-        
-        for(i = 0; i < n; i++){
+
+//cout<<"ns[2]"<<ns[2]<<endl;
+        for(i = 0; i < ns[2]; i++){        
             u = sub[2][i];
-            //clique_vertices_in_left[p-2] = u;
-            
+          // cout<<"U "<<u<<endl;
+            //cout<<"----------          U" << u<<"        -----------"<<endl;
+            clique_vertices_in_left[p-2] = u;
+	    std::unordered_map<int, int> uv;
             op_size[2] = 0;
             end = cd[u] + d[u];
-            std::unordered_map<long long int, std::pair<long long int, long long int>> sign_map;
-            
             if(p <= 2){
                 for(j = cd[u]; j < end; j++){
+               
                     op_vertices[2][op_size[2]++] = adj[j];
                     sign_sum = edge_sign[{u, adj[j]}];
-                    //std::cout << "u, adj[j] Edge sign for edge (" << u << ", " << adj[j] << ") is: " << edge_sign[{u, adj[j]}] << std::endl;
-                     // Ensure the sign_map is initialized correctly
-                    sign_map[adj[j]].first += 1;
-                    sign_map[adj[j]].second = sign_sum;
-                }
-                                                                   // Debug: Check the content of sign_map after processing
-/*std::cout << "Sign map contents after processing vertex u = " << u << ":\n";
-            
+                    uv[adj[j]] = sign_sum;                                                                    
+                    
+                }                           
                 
-		for (const auto& pair : sign_map) {
-			std::cout << "Vertex: " << pair.first << ", Count: " << pair.second.first << ", Sign Sum: " << pair.second.second << std::endl;
-		}*/
-		
             }
             
-
-            
-            else{
-                j = 0;
-                k = cd[u];
-                while(j < op_size[3] && k < cd[u] + d[u]){
-                    if(op_vertices[3][j] == adj[k]){
-                        op_vertices[2][op_size[2]++] = adj[k];
-                        j++;
-                        k++;
-                    }
-                    else if(op_vertices[3][j] < adj[k]){
-                        j++;
-                    }
-                    else{
-                        k++;
-                    }
-                }
-            }
-            
-            /*if(op_size[l] < q){
+            if(op_size[l] < q){
                 continue;
-            }*/
+            }
             
             end = two_hop_cd[u] + two_hop_d[2][u];
             for(a = two_hop_cd[u]; a < end; a++){
                 v = two_hop_adj[a];
-                    long long int similar = 0;
-                    long long int non_similar = 0;
-                //clique_vertices_in_left[0] = v;
-                clique_vertices_in_left[p-1] = v;
-                
+		std::unordered_map<int, int> vw;
                 op_size[1] = 0;
                 
                 j = 0;
                 k = cd[v];
                 while(j < op_size[2] && k < cd[v] + d[v]){
                     if(op_vertices[2][j] == adj[k]){
-                        //right_count++;
                         op_vertices[1][op_size[1]++] = adj[k];
-                        sign_sum = edge_sign[{v, adj[k]}];
-                        //std::cout << "v, adj[k] Edge sign for edge (" << v << ", " << adj[k] << ") is: " << edge_sign[{v, adj[k]}] << std::endl;
-                       
-                        // Update the sign_map
-                        sign_map[adj[k]].first += 1;
-                        sign_map[adj[k]].second += sign_sum;
+                        sign_sum = edge_sign[{v, adj[k]}];                        
+                        vw[adj[k]] = sign_sum;
                         j++;
                         k++;
                     }
+                    
                     else if(op_vertices[2][j] < adj[k]){
                         j++;
                     }
                     else{
                         k++;
                     }
-                    
-                }
-                 
+		 	
+                }		
+		// Now compare sets of three elements from uv and vw
+std::vector<int> uv_keys;
+std::vector<int> vw_keys;
 
-/*                 for (const auto& pair : sign_map) {
-			std::cout << "Vertex: " << pair.first << ", Count: " << pair.second.first << ", Sign Sum: " << pair.second.second << std::endl;
-		}
-		cout<<"---------------------------------"<<endl;*/
-		
-		for (auto it = sign_map.begin(); it != sign_map.end();) {
-                    if (it->second.first < 2) {
-                        it = sign_map.erase(it);
-                    } else {
-                        ++it;
+// Collect keys from uv and vw
+for (const auto &pair : uv) {
+    uv_keys.push_back(pair.first);
+}
+
+for (const auto &pair : vw) {
+    vw_keys.push_back(pair.first);
+}
+
+int uv_size = uv_keys.size();
+int vw_size = vw_keys.size();
+
+for (int i = 0; i < uv_size; i++) {
+    for (int j = i + 1; j < uv_size; j++) {
+        for (int k = j + 1; k < uv_size; k++) {
+            int key1 = uv_keys[i];
+            int key2 = uv_keys[j];
+            int key3 = uv_keys[k];
+
+            for (int a = 0; a < vw_size; a++) {
+                for (int b = a + 1; b < vw_size; b++) {
+                    for (int c = b + 1; c < vw_size; c++) {
+                        int v_key1 = vw_keys[a];
+                        int v_key2 = vw_keys[b];
+                        int v_key3 = vw_keys[c];
+
+                        // Compare indices
+                        if ((key1 == v_key1 && key2 == v_key2 && key3 == v_key3) ||
+                            (key1 == v_key2 && key2 == v_key3 && key3 == v_key1) ||
+                            (key1 == v_key3 && key2 == v_key1 && key3 == v_key2)) {
+                            // If all indices and values match
+                            if (uv[key1] == vw[v_key1] && uv[key2] == vw[v_key2] && uv[key3] == vw[v_key3]) {
+                                result++;
+                            } else {
+                                // If all indices match but not all values
+                                if (uv[key1] != vw[v_key1] || uv[key2] != vw[v_key2] || uv[key3] != vw[v_key3]) {
+                                    result++;
+                                }
+                            }
+                        }
                     }
                 }
-		
-		for (const auto& pair : sign_map) {
-                    if (pair.second.second == 2 || pair.second.second == 0) {
-                        similar++;
-                    } else if (pair.second.second == 1) {
-                        non_similar++;
-                    }
-                }
-			
-
-		
-		if (similar > 2) {
-                    result += (similar * (similar - 1) * (similar - 2)) / 6;
-                }
-
-                if (non_similar > 2) {
-                    result += (non_similar * (non_similar - 1) * (non_similar - 2)) / 6;
-                }
+            }
+        }
+    }
+}	
+                	
                 
-                
+                	           
                 if(op_size[1] < q){
                     continue;
                 }
-
+                
+                #ifdef COUNT_ONLY
+                result_count += Tools::choose(op_size[1], q);
+                #else
+                vector<int> seed_vertices(op_size[1]);
+                for(j = 0; j < op_size[1]; j++){
+                    seed_vertices[j] = op_vertices[1][j];
+                }
+                #ifdef LARGE_BICLIQUES
+                //large_bcliques.push_back(make_pair(clique_vertices_in_left, seed_vertices));
+                string left_str = Tools::toString(seed_vertices);
+                if(large_bcliques_map.find(left_str) != large_bcliques_map.end()){
+                    large_bcliques_map[left_str] = Tools::merge(large_bcliques_map[left_str], clique_vertices_in_left);
+                }
+                else{
+                    large_bcliques_map[left_str] = clique_vertices_in_left;
+                }
+                #else
+                lint comb_count = 0;
+               
+                vector< vector<int> > combinations;
+                int comb_size = q;
+                vector<int> temp_comb(comb_size);
+                find_combinations(combinations, comb_count, seed_vertices, temp_comb, 0, comb_size, comb_size);
+                for(vector< vector<int> >::iterator it = combinations.begin(); it != combinations.end(); it++){
+                
+                cout<<"=======================hi hi hi============== "<<endl;
+                    bcliques.emplace_back(make_pair(clique_vertices_in_left, *it));
+                }
+                #endif
+                #endif
+                
             }
             
-                
-            
+           
         }
-        std::cout << "Final Result = " << result << std::endl;
+
+        std::cout << "balanced  Result = " << result << std::endl;
         return;
     }
-    for (i = 0; i < ns[l]; i++) {
+    
+    for(i = 0; i < ns[l]; i++){
         u = sub[l][i];
-        clique_vertices_in_left[p - l] = u;
+        //clique_vertices_in_left[l-1] = u;
+        clique_vertices_in_left[p-l] = u;
+        //cout << "u[" << l << "]=" << u << endl;
+        // to handle opposite vertices;
         op_size[l] = 0;
-
-        if (l == p) {
+        if(l == p){
+            // op_vertices[p] is simply all adj vertices of u
             end = cd[u] + d[u];
-            for (j = cd[u]; j < end; j++) {
+            for(j = cd[u]; j < end; j++){
                 op_vertices[l][op_size[l]++] = adj[j];
             }
-        } else {
+        }
+        else{
             j = 0;
             k = cd[u];
-            while (j < op_size[l + 1] && k < cd[u] + d[u]) {
-                if (op_vertices[l + 1][j] == adj[k]) {
+            while(j < op_size[l+1] && k < cd[u] + d[u]){
+                if(op_vertices[l+1][j] == adj[k]){
                     op_vertices[l][op_size[l]++] = adj[k];
                     j++;
                     k++;
-                } else if (op_vertices[l + 1][j] < adj[k]) {
+                }
+                else if(op_vertices[l+1][j] < adj[k]){
                     j++;
-                } else {
+                }
+                else{
                     k++;
                 }
             }
         }
-
-        if (op_size[l] < q) {
+        
+        if(op_size[l] < q){
             continue;
         }
-
-        ns[l - 1] = 0;
+        
+        ns[l-1] = 0;
         end = two_hop_cd[u] + two_hop_d[l][u];
-        for (j = two_hop_cd[u]; j < end; j++) {
-            v = two_hop_adj[j];
-            if (lab[v] == l) {
-                lab[v] = l - 1;
-                sub[l - 1][ns[l - 1]++] = v;
-                two_hop_d[l - 1][v] = 0;
+        //cout << "two_hop_cd[" << u << "] = " << two_hop_cd[u] << endl;
+        //cout << "two_hop_d[" << l << "][" << u << "] = " << two_hop_d[l][u] << endl;
+        for(j = two_hop_cd[u]; j < end; j++){
+            v = two_hop_adj[j];     //cout << "v=" << v << endl;
+            if(lab[v] == l){
+                lab[v] = l-1;
+                sub[l-1][ns[l-1]++] = v;
+                two_hop_d[l-1][v] = 0;
             }
         }
-
-        for (j = 0; j < ns[l - 1]; j++) {
-            v = sub[l - 1][j];
+        for(j = 0; j < ns[l-1]; j++){
+            v = sub[l-1][j];
             end = two_hop_cd[v] + two_hop_d[l][v];
-            for (k = two_hop_cd[v]; k < end; k++) {
+            for(k = two_hop_cd[v]; k < end; k++){
                 w = two_hop_adj[k];
-                if (lab[w] == l - 1) {
-                    two_hop_d[l - 1][v]++;
-                } else {
+                if(lab[w] == l-1){
+                    two_hop_d[l-1][v]++;
+                }
+                else{
                     two_hop_adj[k--] = two_hop_adj[--end];
                     two_hop_adj[end] = w;
                 }
             }
         }
-
-        pqclique(l - 1);
-
-        for (j = 0; j < ns[l - 1]; j++) {
-            v = sub[l - 1][j];
+        
+        pqclique(l-1);
+        
+        for(j = 0; j < ns[l-1]; j++){
+            v = sub[l-1][j];
             lab[v] = l;
         }
     }
 }
-
+  
   
 
 void SpecialBigraph::count_butterflies() {
@@ -1067,77 +1446,67 @@ SpecialBigraph::~SpecialBigraph(){
     delete[] op_size;
 }
 
+long SpecialBigraph::getMemoryUse(){
+    int who = RUSAGE_SELF;
+    struct rusage usage;
+    getrusage(who, &usage);
+    return usage.ru_maxrss;
+}
 
-// the following are tool functions
 
 void SpecialBigraph::print(vector<int> vec){
     for(vector<int>::iterator it = vec.begin(); it != vec.end(); it++){
-        ////cout << *it << " ";
+        cout << *it << " ";
     }
-    ////cout << endl;
+    cout << endl;
 }
 
 void SpecialBigraph::print_adj(){
     for(int i = 0; i < num_vertices; i++){
-        ////cout << "adj[" << i << "] : ";
+        cout << "adj[" << i << "] : ";
         for(int j = 0; j < deg[i]; j++){
-            ////cout << adj_vec[i][j] << " ";
+            cout << adj_vec[i][j] << " ";
         }
-        ////cout << endl;
+        cout << endl;
     }
 }
 
 void SpecialBigraph::print_adj(int i){
     for(int j = 0; j < deg[i]; j++){
-        ////cout << adj_vec[i][j] << " ";
+        cout << adj_vec[i][j] << " ";
     }
-    ////cout << endl;
+    cout << endl;
 }
 
 void SpecialBigraph::print_two_hop_adj(){
+
     
     int maxDeg = 0;
     
     for(int i = 0; i < n_vertices[0]; i++){
         maxDeg = maxDeg >= two_hop_adj_size[i] ? maxDeg : two_hop_adj_size[i];
         
-        ////cout << "two_hop_adj[" << i << "] : ";
+        cout << "two_hop_adj[" << i << "] : ";
         for(int j = 0; j < two_hop_adj_size[i]; j++){
-            ////cout << two_hop_adj_vec[i][j] << " ";
+            cout << two_hop_adj_vec[i][j] << " ";
         }
-        ////cout << endl;
+        cout << endl;
     }
-    ////cout << "max two hop degree : " << maxDeg << endl;
+    cout << "max two hop degree : " << maxDeg << endl;
 }
 
-/*void SpecialBigraph::print_edges(){
-    ////cout << "#vertices : " << num_vertices <<endl;
-    ////cout << "#edges : " << num_edges << endl;
-
-}*/
-
-
-void SpecialBigraph::print_edges() {
-    ////cout << "#vertices : " << num_vertices <<endl;
-    ////cout << "#edges : " << num_edges << endl;
-    for (int i = 0; i < num_vertices; i++) {
-        for (int j = 0; j < deg[i]; j++) {
-            int neighbor = adj_vec[i][j];
-            // Since this is a bipartite graph, you may want to print edges only once
-            if (i < neighbor) {
-                ////cout << i << "  " << neighbor << endl;
-            }
-            
-
-        }
+void SpecialBigraph::print_edges(){
+    cout << "#vertices : " << num_vertices <<endl;
+    cout << "#edges : " << num_edges << endl;
+    for(vector< pair<int, int> >::iterator it = list_of_edges.begin(); it != list_of_edges.end(); it++){
+        cout << it->first << " " << it->second << endl;
     }
 }
-
 
 void SpecialBigraph::print_deg(){
     sort(deg, deg+num_vertices);
     for(int i = num_vertices - 1; i >= num_vertices - 1000; i--){
-        ////cout << deg[i] << endl;
+        cout << deg[i] << endl;
     }
 }
 
@@ -1160,16 +1529,31 @@ void SpecialBigraph::print_bclique(ostream &os, vector<int> &left_vertices, vect
     os << endl;
 }
 
+
 void SpecialBigraph::print_results(){
     #ifdef COUNT_ONLY
-    ////cout << "Total # results : " << result_count << endl;
+    cout << "Total # results hello : " << result_count << endl;
+    #else
+    #ifdef LARGE_BICLIQUES
+ 
+    cout << "Total # results hi: " << large_bcliques_map.size() << endl;
+
+    retrieve_edge_cover_result();
+    #else
+    cout << "Total # results : " << bcliques.size() << endl;
+    for(vector< pair<vector<int>, vector<int> > >::iterator it = bcliques.begin(); it != bcliques.end(); it++){
+        print_bclique(cout, it->first, it->second);
+    }
     #endif
-}   
+    #endif
+}
+
     
+
 void SpecialBigraph::print_map(unordered_map<int, int> ids){
-    ////cout << "new mapping is as follows" << endl;
+    cout << "new mapping is as follows" << endl;
     for(unordered_map<int, int>::iterator it = ids.begin(); it != ids.end(); it++){
-        ////cout << it->first << ", " << it->second << endl;
+        cout << it->first << ", " << it->second << endl;
     }
 }
     
@@ -1181,7 +1565,7 @@ int main(int argc, char *argv[]){
     
     SpecialBigraph *sbgraph;
     if(argc < 5){
-        ////cout << "Too few arguments" << endl;
+        cout << "Too few arguments" << endl;
         return 0;
     }
     else if(argc == 5){
@@ -1203,7 +1587,7 @@ int main(int argc, char *argv[]){
     
     end_clock = clock();
     elapsed_time = (end_clock - beg_clock) / CLOCKS_PER_SEC;
-    ////cout << "Read graph: using " << elapsed_time << " seconds." << endl;
+    cout << "Read graph: using " << elapsed_time << " seconds." << endl;
     
     beg_clock = clock();
     #ifdef COUNT_ONLY
@@ -1211,7 +1595,7 @@ int main(int argc, char *argv[]){
         sbgraph->count_butterflies();
         end_clock = clock();
         elapsed_time = (end_clock - beg_clock) / CLOCKS_PER_SEC;
-        ////cout << "Count butterflies: using " << elapsed_time << " seconds." << endl;
+        cout << "Count butterflies: using " << elapsed_time << " seconds." << endl;
         sbgraph->print_results();
         return 0;
     }
@@ -1223,14 +1607,20 @@ int main(int argc, char *argv[]){
     #endif  
     end_clock = clock();
     elapsed_time = (end_clock - beg_clock) / CLOCKS_PER_SEC;
-    ////cout << "Construct graph: using " << elapsed_time << " seconds." << endl;  
+    cout << "Construct graph: using " << elapsed_time << " seconds." << endl;  
     
     beg_clock = clock();
     sbgraph->listing_cliques();
     end_clock = clock();
     elapsed_time = (end_clock - beg_clock) / CLOCKS_PER_SEC;
-    ////cout << "Computing biclique: using " << elapsed_time << " seconds." << endl;
+    cout << "Computing biclique: using " << elapsed_time << " seconds." << endl;
     
+    //cout << "Cost in finding adjs : " << time_counter1 << " seconds." << endl;
+    sbgraph->print_results();
+
+    cout << "Memory usage : " << sbgraph->getMemoryUse() / (1024*1024) << "MB" << endl;
+    
+    delete sbgraph;
     
     return 0;
 }
